@@ -1,0 +1,74 @@
+name: Discord Workflow Notification
+description: Sends detailed Discord notifications for GitHub Actions workflow failures
+branding:
+  icon: 'bell'
+  color: 'blue'
+
+inputs:
+  discord_webhook_url:
+    description: 'Discord webhook URL'
+    required: true
+  needs_json:
+    description: 'Needs JSON'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Send Discord Notification
+      shell: bash
+      env:
+        DISCORD_WEBHOOK_URL: ${{ inputs.discord_webhook_url }}
+        WORKFLOW_NAME: ${{ github.workflow }}
+        REPO_NAME: ${{ github.repository }}
+        BRANCH: ${{ github.ref_name }}
+        RUN_ID: ${{ github.run_id }}
+        COMMIT_SHA: ${{ github.sha }}
+        NEEDS_JSON: ${{ inputs.needs_json }}
+      run: |
+        RUN_URL="https://github.com/$REPO_NAME/actions/runs/$RUN_ID"
+        COMMIT_URL="https://github.com/$REPO_NAME/commit/$COMMIT_SHA"
+
+        # Process failed jobs
+        failed_jobs_count=$(echo "$NEEDS_JSON" | jq '[.[] | select(.result == "failure")] | length')
+        failed_jobs_list=$(echo "$NEEDS_JSON" | jq -r 'to_entries | map(select(.value.result == "failure") | .key) | .[]')
+
+        # Create payload with detailed failure information
+        payload=$(jq -n \
+          --arg workflow_name "$WORKFLOW_NAME" \
+          --arg repo_name "$REPO_NAME" \
+          --arg branch "$BRANCH" \
+          --arg failed_jobs_count "$failed_jobs_count" \
+          --arg failed_jobs_list "$failed_jobs_list" \
+          --arg run_url "$RUN_URL" \
+          --arg commit_sha "${COMMIT_SHA:0:7}" \
+          --arg commit_url "$COMMIT_URL" \
+          --arg timestamp "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+          '{
+            embeds: [{
+              title: "❌ Workflow Failures Detected",
+              description: "**Repository:** \($repo_name)\n**Branch:** `\($branch)`\n**Failed Jobs:** \($failed_jobs_count)\n\n**Failed Jobs List:**\n\($failed_jobs_list)",
+              color: 15158332,
+              fields: [
+                {
+                  name: "Workflow Run",
+                  value: "[View Details](\($run_url))",
+                  inline: true
+                },
+                {
+                  name: "Commit",
+                  value: "[\($commit_sha)](\($commit_url))",
+                  inline: true
+                }
+              ],
+              footer: {
+                text: ("Workflow: " + $workflow_name)
+              },
+              timestamp: $timestamp
+            }]
+          }')
+
+        # Send notification
+        curl -H "Content-Type: application/json" \
+             -d "$payload" \
+             "$DISCORD_WEBHOOK_URL"
