@@ -2,8 +2,6 @@
 
 A GitHub Action that sends detailed Discord notifications when workflow jobs fail. This action provides rich, formatted Discord messages containing essential information about the failed workflow, making it easier to track and respond to CI/CD issues.
 
-![example](image.png)
-
 ## Features
 
 - 🔔 Instant Discord notifications for workflow failures
