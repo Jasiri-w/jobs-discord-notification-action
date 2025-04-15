@@ -46,7 +46,7 @@ runs:
           --arg timestamp "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
           '{
             embeds: [{
-              title: "❌ Workflow Failures Detected",
+              title: "✅ Workflow Changes Detected",
               description: "**Repository:** \($repo_name)\n**Branch:** `\($branch)`\n**Failed Jobs:** \($failed_jobs_count)\n\n**Failed Jobs List:**\n\($failed_jobs_list)",
               color: 15158332,
               fields: [
