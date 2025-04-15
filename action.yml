@@ -1,5 +1,5 @@
-name: Discord Workflow Notification
-description: Sends detailed Discord notifications for GitHub Actions workflow failures
+name: Generic Discord Workflow Notification
+description: Sends detailed Discord notifications for GitHub Actions workflow changes
 branding:
   icon: 'bell'
   color: 'blue'
