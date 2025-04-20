@@ -11,6 +11,9 @@ inputs:
   needs_json:
     description: 'Needs JSON'
     required: true
+  wake_up_log:
+    description: 'Wake up log output'
+    required: false
 
 runs:
   using: 'composite'
@@ -25,34 +28,50 @@ runs:
         RUN_ID: ${{ github.run_id }}
         COMMIT_SHA: ${{ github.sha }}
         NEEDS_JSON: ${{ inputs.needs_json }}
+        WAKE_UP_LOG: ${{ inputs.wake_up_log }}
       run: |
         RUN_URL="https://github.com/$REPO_NAME/actions/runs/$RUN_ID"
         COMMIT_URL="https://github.com/$REPO_NAME/commit/$COMMIT_SHA"
 
-        # Process failed jobs
-        failed_jobs_count=$(echo "$NEEDS_JSON" | jq '[.[] | select(.result == "failure")] | length')
-        failed_jobs_list=$(echo "$NEEDS_JSON" | jq -r 'to_entries | map(select(.value.result == "failure") | .key) | .[]')
+        # Determine color based on job failures
+        total_failed=$(echo "$NEEDS_JSON" | jq '[.[] | select(.result == "failure")] | length')
+        if [ "$total_failed" -gt 0 ]; then
+          COLOR=15158332  # red
+          STATUS_EMOJI="❌"
+        else
+          COLOR=3066993   # green
+          STATUS_EMOJI="✅"
+        fi
 
-        # Create payload with detailed failure information
+        # Prepare job list with emojis
+        job_summaries=$(echo "$NEEDS_JSON" | jq -r '. | to_entries[] | if .value.result == "success" then "✅ \(.key)" else "❌ \(.key)" end')
+
+        # Create main description
+        description="**Repository:** $REPO_NAME\n**Branch:** \`$BRANCH\`\n\n**Job Results:**\n$job_summaries"
+
+        # If wake_up_log exists, add it prominently
+        if [ -n "$WAKE_UP_LOG" ]; then
+          description="$description\n\n**🚀 App Wake-Up Status:**\n> $WAKE_UP_LOG"
+        fi
+
+        # Build the Discord JSON payload
         payload=$(jq -n \
           --arg workflow_name "$WORKFLOW_NAME" \
-          --arg repo_name "$REPO_NAME" \
-          --arg branch "$BRANCH" \
-          --arg failed_jobs_count "$failed_jobs_count" \
-          --arg failed_jobs_list "$failed_jobs_list" \
+          --arg description "$description" \
           --arg run_url "$RUN_URL" \
           --arg commit_sha "${COMMIT_SHA:0:7}" \
           --arg commit_url "$COMMIT_URL" \
+          --argjson color "$COLOR" \
           --arg timestamp "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
           '{
             embeds: [{
-              title: "✅ Workflow Changes Detected",
-              description: "**Repository:** \($repo_name)\n**Branch:** `\($branch)`\n**Failed Jobs:** \($failed_jobs_count)\n\n**Failed Jobs List:**\n\($failed_jobs_list)",
-              color: 15158332,
+              title: ("Workflow Run " + $workflow_name),
+              description: $description,
+              color: $color,
               fields: [
                 {
                   name: "Workflow Run",
-                  value: "[View Details](\($run_url))",
+                  value: "[View Run](\($run_url))",
                   inline: true
                 },
                 {
@@ -62,13 +81,13 @@ runs:
                 }
               ],
               footer: {
-                text: ("Workflow: " + $workflow_name)
+                text: ("Workflow Completed • " + $workflow_name)
               },
               timestamp: $timestamp
             }]
           }')
 
-        # Send notification
+        # Send the message to Discord
         curl -H "Content-Type: application/json" \
              -d "$payload" \
              "$DISCORD_WEBHOOK_URL"
