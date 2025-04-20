@@ -1,107 +1,101 @@
-# Discord Workflow Notification
+# Discord Workflow Notification for GitHub Actions
 
-A GitHub Action that sends detailed Discord notifications when workflow jobs fail. This action provides rich, formatted Discord messages containing essential information about the failed workflow, making it easier to track and respond to CI/CD issues.
+A GitHub Action that sends rich, detailed Discord notifications for your GitHub workflow runs. It tracks **all job statuses**, **wakes up hibernating apps** (if applicable), and formats the information cleanly into a Discord embed for instant visibility.
 
 ## Features
 
-- 🔔 Instant Discord notifications for workflow failures
-- 📊 Detailed failure information including failed job count and names
+- 🔔 Instant Discord notifications for all workflow runs
+- 🧩 Shows **status of every job** (✅ success / ❌ failure)
+- 🚀 Detects and displays **wake-up attempts** if your app was hibernating
 - 🔗 Direct links to workflow runs and commits
-- 💅 Rich Discord embeds with formatted content
-- 🎨 Color-coded messages for better visibility
-- ⏰ Timestamp information for tracking
-- 📌 Branch and repository context
+- 🎨 Color-coded messages:
+  - Green 🟩 if all jobs succeed
+  - Red 🟥 if any job fails
+- 📌 Displays repository and branch context
+- ⏰ Includes timestamp for easy tracking
+- 💬 Clean and professional message formatting
 
 ## Installation
 
-To use this action in your workflow, add the following step to your `.github/workflows/` YAML file:
+Add this to your `.github/workflows/*.yml`:
 
 ```yaml
-- uses: lacherogwu/failed-jobs-discord-notification-action@v1
+- uses: your-username/jobs-discord-notification-action@your-branch-or-tag
   with:
     discord_webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
     needs_json: ${{ toJSON(needs) }}
+    wake_up_log: ${{ needs.probe_deployed_app.outputs.wake_up_log }}
 ```
 
-## Usage
+> Replace `your-username` and `your-branch-or-tag` accordingly.
 
-This action requires two inputs:
+## Inputs
 
-| Input                 | Description                                       | Required |
-| --------------------- | ------------------------------------------------- | -------- |
-| `discord_webhook_url` | Discord webhook URL for sending notifications     | Yes      |
-| `needs_json`          | JSON string containing the workflow needs context | Yes      |
+| Input                | Description                                                | Required |
+| -------------------- | ----------------------------------------------------------- | -------- |
+| `discord_webhook_url` | Discord webhook URL for sending the notification            | Yes      |
+| `needs_json`         | JSON string containing status info about all workflow jobs  | Yes      |
+| `wake_up_log`        | (Optional) Output from app probing if a wake-up was attempted | No       |
 
-### Prerequisites
+## Setup Prerequisites
 
-1. Create a Discord webhook:
-
+1. **Create a Discord webhook:**
    - Go to your Discord server
-   - Select a channel
-   - Edit Channel → Integrations → Create Webhook
+   - Open channel settings → Integrations → Webhooks → New Webhook
    - Copy the webhook URL
 
-2. Add the webhook URL to your repository secrets:
-   - Go to your repository Settings
-   - Select Secrets and variables → Actions
+2. **Save the webhook URL to GitHub Secrets:**
+   - Go to GitHub → Repository → Settings → Secrets and variables → Actions
    - Create a new secret named `DISCORD_WEBHOOK_URL`
-   - Paste your Discord webhook URL
+   - Paste the copied Discord webhook URL
 
-## Example
-
-Here's a complete workflow example showing how to implement the Discord notification:
+## Example Workflow
 
 ```yaml
-name: CI/CD Pipeline
+name: Keep App Alive and Notify
 
-on: [push, pull_request]
+on:
+  schedule:
+    - cron: '0 */10 * * *' # Every 10 hours
+  workflow_dispatch:
 
 jobs:
-  test:
+  probe_deployed_app:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Run tests
-        run: |
-          # Your test commands here
-          exit 1
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Probe Deployed App
+        uses: ./probe-action
+        id: probe
 
   notify:
-    needs: [test]
+    needs: [probe_deployed_app]
     runs-on: ubuntu-latest
-    if: failure()
     steps:
-      - uses: lacherogwu/failed-jobs-discord-notification-action@v1
+      - uses: your-username/jobs-discord-notification-action@your-branch-or-tag
         with:
           discord_webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           needs_json: ${{ toJSON(needs) }}
+          wake_up_log: ${{ needs.probe_deployed_app.outputs.wake_up_log }}
 ```
 
-### Discord Notification Format
+## Discord Notification Example
 
-The notification will include:
-
-- Workflow name
-- Repository name
-- Branch name
-- Number of failed jobs
-- List of failed job names
-- Direct link to the workflow run
-- Commit hash and link
-- Timestamp of the failure
+- Repository: `user/repo`
+- Branch: `main`
+- Jobs:
+  - ✅ `test`
+  - ❌ `deploy`
+- Wake Up Log: `App hibernating. Attempting to wake up!`
+- Links:
+  - Workflow Run
+  - Commit
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the [MIT License](LICENSE).
 
 ## Author
 
-LacheRo`
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Support
-
-If you encounter any problems or have suggestions, please file an issue in the GitHub repository.
+Maintained by **Jasiri Wa-Kyendo**.
