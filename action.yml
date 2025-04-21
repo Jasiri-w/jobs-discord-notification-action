@@ -9,10 +9,10 @@ inputs:
     description: 'Discord webhook URL'
     required: true
   needs_json:
-    description: 'Needs JSON'
+    description: 'Needs JSON containing job results'
     required: true
   wake_up_log:
-    description: 'Wake up log output'
+    description: 'Wake-up log output if available'
     required: false
 
 runs:
@@ -30,43 +30,49 @@ runs:
         NEEDS_JSON: ${{ inputs.needs_json }}
         WAKE_UP_LOG: ${{ inputs.wake_up_log }}
       run: |
+        echo "DEBUG - Wake Up Log: $WAKE_UP_LOG"
+        
         RUN_URL="https://github.com/$REPO_NAME/actions/runs/$RUN_ID"
         COMMIT_URL="https://github.com/$REPO_NAME/commit/$COMMIT_SHA"
+        
+        # Default to green color
+        COLOR=3066993
 
-        # Determine color based on job failures
-        total_failed=$(echo "$NEEDS_JSON" | jq '[.[] | select(.result == "failure")] | length')
-        if [ "$total_failed" -gt 0 ]; then
-          COLOR=15158332  # red
-          STATUS_EMOJI="❌"
-        else
-          COLOR=3066993   # green
-          STATUS_EMOJI="✅"
-        fi
+        # Build description text cleanly
+        description_text="**Repository:** $REPO_NAME
+        **Branch:** \`$BRANCH\`
 
-        # Prepare job list with emojis
-        job_summaries=$(echo "$NEEDS_JSON" | jq -r '. | to_entries[] | if .value.result == "success" then "✅ \(.key)" else "❌ \(.key)" end')
+        **Job Results:**"
 
-        # Create main description
-        description="**Repository:** $REPO_NAME\n**Branch:** \`$BRANCH\`\n\n**Job Results:**\n$job_summaries"
+        # Add job results
+        for job_name in $(echo "$NEEDS_JSON" | jq -r 'keys[]'); do
+          result=$(echo "$NEEDS_JSON" | jq -r --arg job "$job_name" '.[$job].result')
+          if [ "$result" = "success" ]; then
+            description_text="$description_text\n✅ $job_name"
+          else
+            description_text="$description_text\n❌ $job_name"
+            COLOR=15158332  # Turn red if any job failed
+          fi
+        done
 
-        # If wake_up_log exists, add it prominently
+        # Add wake up log if present
         if [ -n "$WAKE_UP_LOG" ]; then
-          description="$description\n\n**🚀 App Wake-Up Status:**\n> $WAKE_UP_LOG"
+          description_text="$description_text\n\n**🚀 App Wake-Up Status:**\n> $WAKE_UP_LOG"
         fi
 
-        # Build the Discord JSON payload
+        # Build final payload
         payload=$(jq -n \
           --arg workflow_name "$WORKFLOW_NAME" \
-          --arg description "$description" \
+          --arg description_text "$description_text" \
           --arg run_url "$RUN_URL" \
           --arg commit_sha "${COMMIT_SHA:0:7}" \
           --arg commit_url "$COMMIT_URL" \
-          --argjson color "$COLOR" \
           --arg timestamp "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+          --argjson color "$COLOR" \
           '{
             embeds: [{
               title: ("Workflow Run " + $workflow_name),
-              description: $description,
+              description: $description_text,
               color: $color,
               fields: [
                 {
@@ -87,7 +93,7 @@ runs:
             }]
           }')
 
-        # Send the message to Discord
+        # Send Discord notification
         curl -H "Content-Type: application/json" \
              -d "$payload" \
              "$DISCORD_WEBHOOK_URL"
